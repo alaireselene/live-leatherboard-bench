@@ -14,6 +14,7 @@ BATCH_SIZES = [5000, 10000, 20000, 50000, 100000]
 OPERATIONS_COUNT = 1000 # Number of operations to measure for stats
 SIMULATION_DURATION_SEC = 3
 CHURN_RATE = 0.3 # 30% of users update per second
+TOP_K = 100 # Number of top elements to retrieve
 
 def run_benchmark(cls: Type, batch_size: int):
     name = cls.__name__
@@ -183,6 +184,123 @@ def run_realtime_simulation(cls: Type, n: int):
         "Search_P99_us": search_stats["P99"]
     }
 
+def run_topk_benchmark(cls: Type, batch_size: int, k: int = TOP_K):
+    name = cls.__name__
+    print(f"Benchmarking {name} with {batch_size} elements (Top-K Micro, k={k})...")
+    
+    # 1. Initialization
+    data = generate_data(batch_size)
+    lb = cls()
+    
+    # Pre-fill
+    start_init = time.perf_counter_ns()
+    for uid, score in data:
+        lb.insert(uid, score)
+    end_init = time.perf_counter_ns()
+    init_time_us = (end_init - start_init) / 1000.0
+    print(f"Initialization took {init_time_us:.2f} us (Total)")
+
+    # 2. Top-K Query Benchmark
+    topk_times = []
+    
+    for _ in range(OPERATIONS_COUNT):
+        start = time.perf_counter_ns()
+        lb.top_k(k)
+        end = time.perf_counter_ns()
+        topk_times.append(end - start)
+        
+    topk_stats = calculate_stats(topk_times)
+    print_stats(name, f"Top-{k}", OPERATIONS_COUNT, topk_stats)
+    
+    return {
+        "Name": name,
+        "BatchSize": batch_size,
+        "K": k,
+        "InitTotal_us": init_time_us,
+        "TopK_Avg_us": topk_stats["Average"],
+        "TopK_P99_us": topk_stats["P99"]
+    }
+
+def run_topk_realtime_simulation(cls: Type, n: int, k: int = TOP_K):
+    name = cls.__name__
+    print(f"Benchmarking {name} with {n} elements (Top-K Realtime Sim, k={k})...")
+    
+    # 1. Initialization
+    data = generate_data(n)
+    lb = cls()
+    
+    start_init = time.perf_counter_ns()
+    for uid, score in data:
+        lb.insert(uid, score)
+    end_init = time.perf_counter_ns()
+    init_time_us = (end_init - start_init) / 1000.0
+    print(f"Initialization took {init_time_us:.2f} us (Total)")
+
+    # 2. Realtime Simulation with Top-K queries
+    # Target operations per second
+    target_ops_per_sec = int(n * CHURN_RATE)
+    
+    update_latencies = []
+    topk_latencies = []
+    
+    start_sim = time.time()
+    iterations = 0
+    
+    while time.time() - start_sim < SIMULATION_DURATION_SEC:
+        batch_updates = target_ops_per_sec
+        batch_topk = target_ops_per_sec
+        
+        # Prepare data for this batch
+        update_candidates = random.sample(data, batch_updates)
+        
+        batch_start = time.perf_counter_ns()
+        
+        # Updates
+        for uid, _ in update_candidates:
+            new_score = random.randint(0, 15000)
+            op_start = time.perf_counter_ns()
+            lb.update(uid, new_score)
+            op_end = time.perf_counter_ns()
+            update_latencies.append(op_end - op_start)
+            
+        # Top-K Queries
+        for _ in range(batch_topk):
+            op_start = time.perf_counter_ns()
+            lb.top_k(k)
+            op_end = time.perf_counter_ns()
+            topk_latencies.append(op_end - op_start)
+            
+        batch_end = time.perf_counter_ns()
+        batch_duration_sec = (batch_end - batch_start) / 1e9
+        
+        print(f"  Sec {iterations+1}: Processed {batch_updates} updates + {batch_topk} top-k queries in {batch_duration_sec:.4f}s")
+        
+        iterations += 1
+        if iterations >= SIMULATION_DURATION_SEC:
+            break
+            
+        if batch_duration_sec < 1.0:
+            time.sleep(1.0 - batch_duration_sec)
+        else:
+            print(f"  WARNING: Falling behind! Batch took {batch_duration_sec:.4f}s")
+
+    update_stats = calculate_stats(update_latencies)
+    topk_stats = calculate_stats(topk_latencies)
+    
+    print_stats(name, "Realtime Update", len(update_latencies), update_stats)
+    print_stats(name, f"Realtime Top-{k}", len(topk_latencies), topk_stats)
+    
+    return {
+        "Name": name,
+        "BatchSize": n,
+        "K": k,
+        "InitTotal_us": init_time_us,
+        "Update_Avg_us": update_stats["Average"],
+        "Update_P99_us": update_stats["P99"],
+        "TopK_Avg_us": topk_stats["Average"],
+        "TopK_P99_us": topk_stats["P99"]
+    }
+
 def main():
     classes = [
         SortedArrayLeaderboard,
@@ -194,6 +312,8 @@ def main():
     
     micro_results = []
     realtime_results = []
+    topk_micro_results = []
+    topk_realtime_results = []
     
     for n in BATCH_SIZES:
         print(f"\n{'='*20} DATASET SIZE: {n} {'='*20}\n")
@@ -210,6 +330,14 @@ def main():
             # Run Realtime Simulation
             res_realtime = run_realtime_simulation(cls, n)
             realtime_results.append(res_realtime)
+            
+            # Run Top-K Micro-benchmark
+            res_topk_micro = run_topk_benchmark(cls, n)
+            topk_micro_results.append(res_topk_micro)
+            
+            # Run Top-K Realtime Simulation
+            res_topk_realtime = run_topk_realtime_simulation(cls, n)
+            topk_realtime_results.append(res_topk_realtime)
             
     # Write Micro-benchmark Results
     csv_file_micro = "benchmark_results.csv"
@@ -230,6 +358,26 @@ def main():
             dict_writer.writeheader()
             dict_writer.writerows(realtime_results)
         print(f"Realtime benchmark results saved to {csv_file_realtime}")
+
+    # Write Top-K Micro-benchmark Results
+    csv_file_topk_micro = "topk_benchmark_results.csv"
+    if topk_micro_results:
+        keys = topk_micro_results[0].keys()
+        with open(csv_file_topk_micro, 'w', newline='') as f:
+            dict_writer = csv.DictWriter(f, fieldnames=keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(topk_micro_results)
+        print(f"\nTop-K micro-benchmark results saved to {csv_file_topk_micro}")
+
+    # Write Top-K Realtime Results
+    csv_file_topk_realtime = "topk_realtime_benchmark_results.csv"
+    if topk_realtime_results:
+        keys = topk_realtime_results[0].keys()
+        with open(csv_file_topk_realtime, 'w', newline='') as f:
+            dict_writer = csv.DictWriter(f, fieldnames=keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(topk_realtime_results)
+        print(f"Top-K realtime benchmark results saved to {csv_file_topk_realtime}")
 
 if __name__ == "__main__":
     main()

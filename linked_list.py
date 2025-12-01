@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
 class ListNode:
     def __init__(self, user_id: int, score: int):
@@ -101,6 +101,23 @@ class LinkedListLeaderboard:
             current = current.next
             index += 1
         return -1
+
+    def top_k(self, k: int) -> List[Tuple[int, int]]:
+        """
+        Returns the top k users with highest scores.
+        Returns list of (user_id, score) tuples.
+        """
+        # Collect all elements first (list is sorted ascending)
+        elements = []
+        current = self.head
+        while current:
+            elements.append((current.user_id, current.score))
+            current = current.next
+        
+        # Return last k in descending order
+        if k >= len(elements):
+            return [(uid, score) for uid, score in reversed(elements)]
+        return [(uid, score) for uid, score in reversed(elements[-k:])]
 
     def __len__(self):
         return self.size

@@ -1,5 +1,5 @@
 import random
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 class SkipNode:
     def __init__(self, user_id: int, score: int, level: int):
@@ -136,6 +136,23 @@ class SkipListLeaderboard:
         if x.forward[0] and x.forward[0].score == score and x.forward[0].user_id == user_id:
             return rank
         return -1
+
+    def top_k(self, k: int) -> List[Tuple[int, int]]:
+        """
+        Returns the top k users with highest scores.
+        Returns list of (user_id, score) tuples.
+        """
+        # Traverse the skip list at level 0 to collect all elements
+        elements = []
+        current = self.header.forward[0]
+        while current:
+            elements.append((current.user_id, current.score))
+            current = current.forward[0]
+        
+        # Return last k in descending order (list is sorted ascending)
+        if k >= len(elements):
+            return [(uid, score) for uid, score in reversed(elements)]
+        return [(uid, score) for uid, score in reversed(elements[-k:])]
 
     def __len__(self):
         return self.size

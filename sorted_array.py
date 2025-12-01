@@ -69,5 +69,18 @@ class SortedArrayLeaderboard:
             return idx
         return -1
 
+    def top_k(self, k: int) -> List[Tuple[int, int]]:
+        """
+        Returns the top k users with highest scores.
+        Returns list of (user_id, score) tuples.
+        """
+        # Data is sorted in ascending order, so top k are at the end
+        n = len(self.data)
+        if k >= n:
+            # Return all in descending order
+            return [(uid, score) for score, uid in reversed(self.data)]
+        # Return last k elements in descending order
+        return [(uid, score) for score, uid in reversed(self.data[-k:])]
+
     def __len__(self):
         return len(self.data)

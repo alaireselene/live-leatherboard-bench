@@ -120,6 +120,93 @@ Mô phỏng tải thực tế với 30% user cập nhật điểm số mỗi gi�
   caption: [Search Latency under Load],
 )
 
+=== 2.3. Top-K Query Performance (k = 100)
+
+Truy vấn Top-K là thao tác quan trọng trong leaderboard để hiển thị bảng xếp hạng. Ta đánh giá hiệu năng truy vấn Top-100 (k = 100) cho mọi kích thước dữ liệu.
+
+==== 2.3.1. Micro-benchmark Top-K
+
+#let topk_raw_data = csv("topk_benchmark_results.csv")
+#let topk_rows = topk_raw_data.slice(1)
+
+#let topk_algos = (
+  "SortedArrayLeaderboard",
+  "LinkedListLeaderboard",
+  "RBTreeLeaderboard",
+  "SkipListLeaderboard",
+  "ScoreIndexedArrayLeaderboard",
+)
+
+#let get_topk_data(algo, col_index) = {
+  topk_rows.filter(r => r.at(0) == algo).map(r => (int(r.at(1)), float(r.at(col_index))))
+}
+
+#figure(
+  lq.diagram(
+    title: "Top-K Query Latency (k=100) vs Batch Size",
+    xlabel: "Batch Size",
+    ylabel: "Time (us)",
+    legend: (position: (100% + .5em, 0%)),
+    ..topk_algos
+      .enumerate()
+      .map(((i, algo)) => lq.plot(
+        get_topk_data(algo, 4).map(x => x.at(0)),
+        get_topk_data(algo, 4).map(x => x.at(1)),
+        label: algo_labels.at(i),
+        mark: marks.at(i),
+        color: colors.at(i),
+      )),
+  ),
+  caption: [Top-K Query Latency (Average, k=100)],
+)
+
+==== 2.3.2. Realtime Top-K Simulation
+
+Mô phỏng tải thực tế với 30% user cập nhật và 30% truy vấn Top-K mỗi giây.
+
+#let topk_rt_raw_data = csv("topk_realtime_benchmark_results.csv")
+#let topk_rt_rows = topk_rt_raw_data.slice(1)
+
+#let topk_rt_algos = (
+  "SortedArrayLeaderboard",
+  "RBTreeLeaderboard",
+  "SkipListLeaderboard",
+  "ScoreIndexedArrayLeaderboard",
+)
+
+#let get_topk_rt_data(algo, col_index) = {
+  topk_rt_rows.filter(r => r.at(0) == algo).map(r => (int(r.at(1)), float(r.at(col_index))))
+}
+
+#figure(
+  lq.diagram(
+    title: "Realtime Top-K Query Latency (k=100)",
+    xlabel: "Dataset Size",
+    ylabel: "Time (us)",
+    legend: (position: (100% + .5em, 0%)),
+    ..topk_rt_algos
+      .enumerate()
+      .map(((i, algo)) => lq.plot(
+        get_topk_rt_data(algo, 6).map(x => x.at(0)),
+        get_topk_rt_data(algo, 6).map(x => x.at(1)),
+        label: rt_labels.at(i),
+        mark: marks.at(rt_indices.at(i)),
+        color: colors.at(rt_indices.at(i)),
+      )),
+  ),
+  caption: [Top-K Query Latency under Load (k=100)],
+)
+
+*Phân tích Top-K Performance:*
+
+- *Sorted Array*: Cực nhanh ($O(k)$) vì chỉ cần copy k phần tử cuối mảng. Tốt nhất cho truy vấn Top-K.
+- *Linked List*: Rất chậm ($O(N)$) vì phải duyệt toàn bộ danh sách để tìm k phần tử cuối.
+- *Red-Black Tree*: Hiệu năng tốt ($O(k log N)$) nhờ reverse in-order traversal.
+- *Skip List*: Tương tự RB Tree, cần duyệt qua danh sách để lấy k phần tử.
+- *Score-Indexed Array*: Hiệu năng trung bình, phụ thuộc vào phân bố điểm số.
+
+
+
 == 3. Nhận xét và So sánh
 
 === 3.1. Phân tích chi tiết

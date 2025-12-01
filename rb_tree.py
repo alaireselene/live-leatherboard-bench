@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
 RED = True
 BLACK = False
@@ -310,6 +310,35 @@ class RBTreeLeaderboard:
                 rank += current.left.size + 1
                 current = current.right
         return -1
+
+    def top_k(self, k: int) -> List[Tuple[int, int]]:
+        """
+        Returns the top k users with highest scores.
+        Returns list of (user_id, score) tuples.
+        Uses reverse in-order traversal (right -> node -> left).
+        """
+        result = []
+        
+        def reverse_inorder(node: RBNode, remaining: int) -> int:
+            if node == self.nil or remaining <= 0:
+                return remaining
+            
+            # Visit right subtree first (higher scores)
+            remaining = reverse_inorder(node.right, remaining)
+            
+            # Visit current node
+            if remaining > 0:
+                result.append((node.user_id, node.score))
+                remaining -= 1
+            
+            # Visit left subtree
+            if remaining > 0:
+                remaining = reverse_inorder(node.left, remaining)
+            
+            return remaining
+        
+        reverse_inorder(self.root, k)
+        return result
 
     def __len__(self):
         return self.root.size

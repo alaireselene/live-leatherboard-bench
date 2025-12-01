@@ -134,7 +134,7 @@ class ScoreIndexedArrayLeaderboard:
         
         return rank
 
-    def get_top_k(self, k: int) -> List[tuple]:
+    def top_k(self, k: int) -> List[tuple]:
         """
         Returns the top k users with their scores.
         Time Complexity: O(max_score + k)
